@@ -222,3 +222,73 @@ class ReplicateVideoClient:
         except Exception as e:
             print(f"❌ Error: {str(e)}")
             raise Exception(f"Replicate API error: {str(e)}")
+    def runway_gen3(
+        self,
+        prompt: str,
+        input_video_url: Optional[str] = None,
+        duration: int = 5,
+        aspect_ratio: str = "16:9",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Generate or edit video using Runway Gen-3 Alpha Turbo on Replicate
+        
+        Args:
+            prompt: Deskripsi perubahan atau video baru
+            input_video_url: URL video sumber untuk video-to-video (optional)
+            duration: 5 atau 10 detik
+        """
+        try:
+            print(f"🎬 Runway Gen-3 Alpha Turbo")
+            print(f"📝 Prompt: {prompt[:100]}...")
+            
+            model_version = "runwayml/gen-3-alpha-turbo"
+            
+            input_params = {
+                "prompt": prompt,
+                "aspect_ratio": aspect_ratio,
+            }
+            
+            if input_video_url:
+                print(f"📹 Source Video: {input_video_url[:80]}...")
+                input_params["input_video"] = input_video_url
+            
+            # Runway gen-3 only supports 5 or 10
+            if duration > 5:
+                input_params["duration"] = 10
+            else:
+                input_params["duration"] = 5
+                
+            print(f"🤖 Using model: {model_version}")
+            
+            # Run model
+            output = replicate.run(
+                model_version,
+                input=input_params
+            )
+            
+            # Parse output
+            if isinstance(output, str):
+                video_url = output
+            elif hasattr(output, 'url'):
+                video_url = output.url
+            elif isinstance(output, list) and len(output) > 0:
+                video_url = output[0] if isinstance(output[0], str) else output[0].url
+            else:
+                video_url = str(output)
+            
+            print(f"✅ Video generated with Runway: {video_url[:80]}...")
+            
+            return {
+                "status": "completed",
+                "video_url": video_url,
+                "model": model_version,
+                "prompt": prompt,
+                "duration": input_params["duration"],
+                "aspect_ratio": aspect_ratio,
+                "source_video": input_video_url
+            }
+            
+        except Exception as e:
+            print(f"❌ Runway Error: {str(e)}")
+            raise Exception(f"Runway Gen-3 API error: {str(e)}")

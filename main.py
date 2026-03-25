@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from replicate_client import ReplicateVideoClient
+from runway_client import RunwayMLClient
 
 # Load environment variables
 load_dotenv()
@@ -41,6 +42,14 @@ except Exception as e:
     video_client = None
     print(f"⚠️  Replicate initialization error: {e}")
 
+# Initialize Runway client
+try:
+    runway_client = RunwayMLClient()
+    print(f"✅ Runway direct client initialized")
+except Exception as e:
+    runway_client = None
+    print(f"⚠️  Runway initialization error: {e}")
+
 class PromptRequest(BaseModel):
     prompt: str
     model: str = "minimax"
@@ -56,11 +65,12 @@ class VideoGenerationRequest(BaseModel):
     prompt: str
     duration: int = 5
     image_url: str = None
+    input_video_url: str = None
     style: str = None
     negative_prompt: str = None
     motion_strength: float = 0.5
     wait_for_completion: bool = False
-    model: str = "minimax"  # minimax only
+    model: str = "minimax"  # minimax or runway
 
 @app.get("/")
 def root():
@@ -236,8 +246,19 @@ def generate_video(request: VideoGenerationRequest):
                 detail="Replicate API not configured. Check REPLICATE_API_TOKEN in .env. Get free $10-25 credit at https://replicate.com/"
             )
         
+        if request.model == "runway":
+            if not runway_client:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Runway ML API not configured. Check RUNWAYML_API_KEY in .env."
+                )
+            print(f"🚀 Runway Gen-3 Direct Mode")
+            result = runway_client.generate_video(
+                prompt=request.prompt,
+                duration=request.duration
+            )
         # Image-to-Video
-        if request.image_url:
+        elif request.image_url:
             print(f"🖼️  Image-to-Video mode")
             print(f"📷 Image URL: {request.image_url}")
             
@@ -311,13 +332,13 @@ def generate_video(request: VideoGenerationRequest):
         if "REPLICATE_API_TOKEN" in error_detail or "not found" in error_detail:
             error_detail = "API token tidak valid. Dapatkan free credit $10-25 di https://replicate.com/ lalu set REPLICATE_API_TOKEN di .env"
         elif "429" in error_detail or "rate limit" in error_detail.lower():
-            error_detail = "Rate limit exceeded. Tunggu beberapa menit atau top up credit."
-        elif "insufficient" in error_detail.lower() or "credit" in error_detail.lower():
-            error_detail = "Credit habis. Top up di https://replicate.com/account/billing"
+            error_detail = "Rate limit Replicate tercapai (429). Tunggu beberapa menit atau tambahkan metode pembayaran di Replicate."
+        elif "402" in error_detail or "insufficient" in error_detail.lower() or "credit" in error_detail.lower():
+            error_detail = "Credit Replicate habis atau trial berakhir (402). Silakan top up di https://replicate.com/account/billing"
         
         raise HTTPException(
             status_code=500,
-            detail=f"Replicate API error: {error_detail}"
+            detail=error_detail
         )
 
 @app.get("/task-status/{task_id}")
