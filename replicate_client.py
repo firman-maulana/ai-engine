@@ -222,43 +222,37 @@ class ReplicateVideoClient:
         except Exception as e:
             print(f"❌ Error: {str(e)}")
             raise Exception(f"Replicate API error: {str(e)}")
-    def runway_gen3(
+    def wan_animate_replace(
         self,
-        prompt: str,
-        input_video_url: Optional[str] = None,
-        duration: int = 5,
-        aspect_ratio: str = "16:9",
+        image_url: str,
+        input_video_url: str,
+        prompt: str = "Animate this image to match the video motion",
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Generate or edit video using Runway Gen-3 Alpha Turbo on Replicate
+        Replace character in video using Wan2.2 Animate Replace on Replicate
         
         Args:
-            prompt: Deskripsi perubahan atau video baru
-            input_video_url: URL video sumber untuk video-to-video (optional)
-            duration: 5 atau 10 detik
+            image_url: URL gambar karakter baru
+            input_video_url: URL video sumber (motion)
+            prompt: Text prompt tambahan (opsional)
         """
         try:
-            print(f"🎬 Runway Gen-3 Alpha Turbo")
-            print(f"📝 Prompt: {prompt[:100]}...")
+            print(f"🎬 Wan2.2 Animate Replace")
+            print(f"📷 Target Image: {image_url[:80]}...")
+            print(f"📹 Source Video: {input_video_url[:80]}...")
             
-            model_version = "runwayml/gen-3-alpha-turbo"
+            # Convert localhost to base64 data URI for replicate if needed
+            processed_image_url = self.upload_image_to_replicate(image_url)
+            
+            model_version = "wan-video/wan-2.2-animate-replace"
             
             input_params = {
-                "prompt": prompt,
-                "aspect_ratio": aspect_ratio,
+                "image": processed_image_url,
+                "video": input_video_url,
+                "prompt": prompt
             }
             
-            if input_video_url:
-                print(f"📹 Source Video: {input_video_url[:80]}...")
-                input_params["input_video"] = input_video_url
-            
-            # Runway gen-3 only supports 5 or 10
-            if duration > 5:
-                input_params["duration"] = 10
-            else:
-                input_params["duration"] = 5
-                
             print(f"🤖 Using model: {model_version}")
             
             # Run model
@@ -267,7 +261,7 @@ class ReplicateVideoClient:
                 input=input_params
             )
             
-            # Parse output
+            # Parse output (Replicate usually returns URL directly or File object)
             if isinstance(output, str):
                 video_url = output
             elif hasattr(output, 'url'):
@@ -277,18 +271,18 @@ class ReplicateVideoClient:
             else:
                 video_url = str(output)
             
-            print(f"✅ Video generated with Runway: {video_url[:80]}...")
+            print(f"✅ Video generated with Wan2.2: {video_url[:80]}...")
             
             return {
                 "status": "completed",
                 "video_url": video_url,
                 "model": model_version,
                 "prompt": prompt,
-                "duration": input_params["duration"],
-                "aspect_ratio": aspect_ratio,
-                "source_video": input_video_url
+                "source_image": image_url,
+                "source_video": input_video_url,
+                "duration": 5 # Estimated
             }
             
         except Exception as e:
-            print(f"❌ Runway Error: {str(e)}")
-            raise Exception(f"Runway Gen-3 API error: {str(e)}")
+            print(f"❌ Wan2.2 Error: {str(e)}")
+            raise Exception(f"Wan2.2 API error: {str(e)}")

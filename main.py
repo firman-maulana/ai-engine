@@ -4,7 +4,10 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from replicate_client import ReplicateVideoClient
-from runway_client import RunwayMLClient
+from fal_client_manager import FalClientManager
+import os
+
+from fastapi.staticfiles import StaticFiles
 
 # Load environment variables
 load_dotenv()
@@ -42,13 +45,12 @@ except Exception as e:
     video_client = None
     print(f"⚠️  Replicate initialization error: {e}")
 
-# Initialize Runway client
+# Initialize Fal client
 try:
-    runway_client = RunwayMLClient()
-    print(f"✅ Runway direct client initialized")
+    fal_client = FalClientManager()
 except Exception as e:
-    runway_client = None
-    print(f"⚠️  Runway initialization error: {e}")
+    fal_client = None
+    print(f"⚠️  Fal initialization error: {e}")
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -66,11 +68,12 @@ class VideoGenerationRequest(BaseModel):
     duration: int = 5
     image_url: str = None
     input_video_url: str = None
+    reference_image_url: str = None # Added for VidEdit
     style: str = None
     negative_prompt: str = None
     motion_strength: float = 0.5
     wait_for_completion: bool = False
-    model: str = "minimax"  # minimax or runway
+    model: str = "minimax"  # minimax, replicate/video-01, or fal-ai/wan
 
 @app.get("/")
 def root():
@@ -240,25 +243,27 @@ def generate_video(request: VideoGenerationRequest):
     - Image-to-Video: Kirim prompt + image_url
     """
     try:
-        if not video_client:
-            raise HTTPException(
-                status_code=503,
-                detail="Replicate API not configured. Check REPLICATE_API_TOKEN in .env. Get free $10-25 credit at https://replicate.com/"
-            )
-        
-        if request.model == "runway":
-            if not runway_client:
+        # Advanced Video-to-Video Editing (Wan2.2 Animate Replace using Fal.ai)
+        if request.input_video_url and request.image_url:
+            if not fal_client:
                 raise HTTPException(
                     status_code=503,
-                    detail="Runway ML API not configured. Check RUNWAYML_API_KEY in .env."
+                    detail="Fal.ai API not configured. Check FAL_KEY in .env."
                 )
-            print(f"🚀 Runway Gen-3 Direct Mode")
-            result = runway_client.generate_video(
-                prompt=request.prompt,
-                duration=request.duration
+            print(f"🎨 Using Wan2.2 Animate Replace for Template Editing (Fal.ai)...")
+            result = fal_client.wan_animate_replace(
+                image_url=request.image_url,
+                video_url=request.input_video_url,
+                prompt=request.prompt
             )
-        # Image-to-Video
+
+        # Image-to-Video (using Replicate)
         elif request.image_url:
+            if not video_client:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Replicate API not configured. Check REPLICATE_API_TOKEN in .env. Get free $10-25 credit at https://replicate.com/"
+                )
             print(f"🖼️  Image-to-Video mode")
             print(f"📷 Image URL: {request.image_url}")
             
